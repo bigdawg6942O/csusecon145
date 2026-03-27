@@ -63,6 +63,54 @@ new_nhis <- nhis %>%
   )
 # Descriptive Statistics and Visualization
 
+# RACENEW to categorical variable
+dem_nhis <- new_nhis %>%
+  select(YEAR, RACENEW, DEPFEELEVL, POVLEV)
+dem_nhis$RACENEW <- factor(dem_nhis$RACENEW,
+                           levels = c(100, 200, 300, 400, 500, 510, 520, 530, 540, 541, 542, 997, 998, 999),
+                           labels = c("White only", "Black/African American only", "American Indian", "Asian only", "Other & mult", "Othmult 2019", "Other", "Not Releasable", "Multiple Race", "Mult1999", "native and other", "unk refuse", "unk not asc", "unk idk")
+                           )
+# DEPFEELEVL to categorical
+#dem_nhis$DEPFEELEVL <- factor(dem_nhis$DEPFEELEVL,
+       #  levels = c(0, 1, 2, 3),
+      #   labels = c("No depression", "little depression", "lot depression", "btwn little and lot")
+       #  )
+
+# Descriptive Statistics 
+
+# Demographics
+desc_dem <- dem_nhis %>%
+  group_by(RACENEW) %>%
+  summarise(
+    count = n(),
+    #pct_depressed = sum(DEPFEELEVL > 0) / n(),
+    pct_depressed0 = sum(DEPFEELEVL == 0) / n(),
+    pct_depressed1 = sum(DEPFEELEVL == 1) / n(),
+    pct_depressed2 = sum(DEPFEELEVL == 2) / n(),
+    pct_depressed3 = sum(DEPFEELEVL == 3) / n(),
+    income = mean(POVLEV)
+  )
+
+# Depression on Poverty Level Box Plot
+visdep_nhis <- new_nhis %>%
+  select(YEAR, DEPFEELEVL, POVLEV)
+
+#DEPFEELEVL to categorical
+visdep_nhis$DEPFEELEVL <- factor(dem_nhis$DEPFEELEVL,
+  levels = c(0, 1, 2, 3),
+   labels = c("No Depression", "Little Depression", "Lot Depression", "Btwn Little and Lot")
+  )
+
+visdep_nhis$DEPFEELEVL <- factor(visdep_nhis$DEPFEELEVL, levels = c("No Depression", "Little Depression", "Btwn Little and Lot", "Lot Depression"))
+
+ggplot(visdep_nhis, mapping = aes(x = DEPFEELEVL, y = POVLEV)) +
+  geom_boxplot() + 
+  labs(
+    title = "Depression's Effect on Family Income as a % of Poverty Line",
+    x = "Level of Depression",
+    y = "Family Income as % of Poverty Level"
+  ) 
+
 
 # Models
 
@@ -106,4 +154,3 @@ olsmodel <- plm(POVLEV ~ any_dep + AGE + agesq + male + hsgrad + somcollege + ba
                 effect = "twoways")
 
 stargazer(tslsmodel, olsmodel, type = "text", title = "TSLS vs OLS", object.names = TRUE, object.numbers = FALSE)
-
