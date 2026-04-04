@@ -116,7 +116,8 @@ stargazer(descriptive_stat,
           type = "text", 
           omit.summary.stat = c("min", "max", "N"), 
           title = "Descriptive Statistics",
-          covariate.labels = c("No Depression", "Little Depression", "Lot of Depression", "Medium Depression", "Northeast", "Midwest", "South", "West", "Male", "Female", "Less than HS", "HS Graduate", "Some College", "Bachelors", "Grad School", "White", "Black", "Native American", "Multiple Races", "Unknown", "Married", "Separated", "Divorced", "Widowed", "Living with Partner", "Never Married", "Unemployed", "Age")
+          covariate.labels = c("No Depression", "Little Depression", "Lot of Depression", "Medium Depression", "Northeast", "Midwest", "South", "West", "Male", "Female", "Less than HS", "HS Graduate", "Some College", "Bachelors", "Grad School", "White", "Black", "Native American", "Multiple Races", "Unknown", "Married", "Separated", "Divorced", "Widowed", "Living with Partner", "Never Married", "Unemployed", "Age"),
+          out = "descriptive_stats.txt"
           )
 
 # Demographics
