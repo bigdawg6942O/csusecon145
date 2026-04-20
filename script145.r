@@ -3,20 +3,19 @@ install.packages("AER")
 install.packages("plm")
 install.packages("tidyverse")
 install.packages("stargazer")
-install.packages("gtsummary")
+install.packages("lmtest")
+
 
 library(AER)
 library(plm)
 library(tidyverse)
 library(stargazer)
-library(gtsummary)
+library(lmtest)
 
 # Import Dataset
-ipums_mental_health <- read_csv("nhis_00007.csv")
+nhis <- read_csv("nhis_00007.csv")
 
-# Cleaning
-# Create tibble from nhis_00007.csv
-nhis <- ipums_mental_health
+
 
 
 new_nhis <- nhis %>%
@@ -63,11 +62,73 @@ new_nhis <- nhis %>%
     # Any depression dummy
     any_dep = ifelse(DEPFEELEVL >= 1, 1, 0)
   )
+
+
+
+
 # Descriptive Statistics and Visualization
 
 # RACENEW to categorical variable
 dem_nhis <- new_nhis %>%
-  select(YEAR, RACENEW, DEPFEELEVL, POVLEV, SEX, AGE)
+  select(YEAR, RACENEW, DEPFEELEVL, POVLEV, SEX, AGE, EDUC, YDELAYMENTAL, VIOLENEV, MENTDEPEV, ADLTPUTDOWN) %>%
+  filter(YDELAYMENTAL >= 1 & YDELAYMENTAL <= 2) %>%
+  filter(VIOLENEV >= 1 & VIOLENEV <= 2) %>%
+  filter(MENTDEPEV >= 1 & MENTDEPEV <= 2) %>%
+  filter(ADLTPUTDOWN >=1 & ADLTPUTDOWN <= 2) %>%
+  mutate(
+    delayedhelp = ifelse(YDELAYMENTAL == 2, 1, 0),
+    violence = ifelse(VIOLENEV == 2, 1, 0),
+    mentlive = ifelse(MENTDEPEV == 2, 1, 0),
+    putdown = ifelse(ADLTPUTDOWN == 2, 1, 0)
+  )
+
+inst_nhis <- dem_nhis %>%
+  select(delayedhelp, violence, mentlive, putdown)
+stargazer(as.data.frame(inst_nhis), type = "text", omit.summary.stat = c("min", "max", "N"), 
+          title = "Instrument Descriptive Statistics",
+          covariate.labels = c("Delayed Help", "Experienced Violence", "Ment. Ill in house", "Put down by adult"),
+          out = "instrument_stats.txt"
+)
+
+
+desc_inst <- new_nhis %>%
+  filter(YEAR >= 2021 & YEAR <= 2023) %>%
+  select(YDELAYMENTAL, VIOLENEV, MENTDEPEV, ADLTPUTDOWN, POVLEV, DEPFEELEVL) %>%
+  pivot_longer(
+    cols = c("YDELAYMENTAL", "VIOLENEV", "MENTDEPEV", "ADLTPUTDOWN"),
+    names_to = "instrument",
+    values_to = "response"
+  ) %>%
+  filter(
+    response <3 & response > 0
+  ) 
+desc_inst$response <- factor(desc_inst$response,
+                                 levels = c(1,2),
+                                 labels = c("no", "yes")
+)
+desc_inst$depfeel <- factor(desc_inst$DEPFEELEVL,
+                                 levels = c(0, 1, 2, 3),
+                                 labels = c("no", "little", "Lot", "med")
+)
+
+inst_summary <- desc_inst %>%
+  filter(response == "yes") %>%
+  group_by(instrument) %>%
+  summarise(
+    count = n(),
+    #pct_depressed = sum(DEPFEELEVL > 0) / n(),
+    pct_depressed0 = sum(DEPFEELEVL == 0) / n(),
+    pct_depressed1 = sum(DEPFEELEVL == 1) / n(),
+    pct_depressed2 = sum(DEPFEELEVL == 2) / n(),
+    pct_depressed3 = sum(DEPFEELEVL == 3) / n(),
+    income = mean(POVLEV),
+    sd_income = sd(POVLEV)
+  )
+
+
+test_inst <- desc_inst %>%
+  filter(instrument == "VIOLENEV") 
+
 dem_nhis$RACENEW <- factor(dem_nhis$RACENEW,
                            levels = c(100, 200, 300, 400, 500, 510, 520, 530, 540, 541, 542, 997, 998, 999),
                            labels = c("White only", "Black/African American only", "American Indian", "Asian only", "Other & mult", "Othmult 2019", "Other", "Not Releasable", "Multiple Race", "Mult1999", "native and other", "unk refuse", "unk not asc", "unk idk")
@@ -80,6 +141,36 @@ dem_nhis$catDEPFEELEVL <- factor(dem_nhis$DEPFEELEVL,
                                  levels = c(0, 1, 2, 3),
                                  labels = c("No depression", "little depression", "lot depression", "btwn little and lot")
 )
+# education shit
+desc_edu <- new_nhis %>%
+  #filter(AGE < 900)%>% 
+  mutate(
+    edu_group = case_when(
+      EDUC < 200 ~ "Less than HS",
+      EDUC >= 200 & EDUC <= 202 ~ "HS Grad",
+      EDUC >= 300 & EDUC <= 303 ~ "Some College",
+      EDUC == 400 ~ "Bachelors",
+      EDUC >= 500 & EDUC <=522 ~ "Grad School",
+      EDUC == 530 ~ "Other Degree",
+      EDUC >= 996 ~ "Unknown Level of Education"
+    ),
+    edu_group = factor(
+      edu_group,
+      level = c("Less than HS","HS Grad", "Some College", "Bachelors", "Grad School", "Other Degree", "Unknown Level of Education")
+    )
+  ) %>%
+  group_by(edu_group) %>%
+  summarise(
+    count = n(),
+    pct_depressed0 = sum(DEPFEELEVL == 0) / n(),
+    pct_depressed1 = sum(DEPFEELEVL == 1) / n(),
+    pct_depressed2 = sum(DEPFEELEVL == 2) / n(),
+    pct_depressed3 = sum(DEPFEELEVL == 3) / n(),
+    income = mean(POVLEV),
+    sd_income = sd(POVLEV)
+  )
+
+
 #dem_nhis %>%
 #select(RACENEW,catDEPFEELEVL,POVLEV,SEX,AGE) %>%
  # tbl_summary(
@@ -111,14 +202,16 @@ summary(dem_nhis$RACE)
 
 
 descriptive_stat <- as.data.frame(new_nhis) %>%
-  select(no_dep, little_dep, lot_dep, some_bet, northeast, midwest, south, west, male, female, lessthanhs, hsgrad, somcollege, bachelors, gradschool, white, black, nativeam, multipleraces, unknown, married, separated, divorced, widowed, livingwithpart, nevermar, unemployed, AGE)
+  select(POVLEV, no_dep, little_dep, some_bet, lot_dep, YDELAYMENTAL, VIOLENEV, MENTDEPEV, northeast, midwest, south, west, male, female, lessthanhs, hsgrad, somcollege, bachelors, gradschool, white, black, nativeam, multipleraces, unknown, married, separated, divorced, widowed, livingwithpart, nevermar, unemployed, AGE)
 stargazer(descriptive_stat, 
           type = "text", 
           omit.summary.stat = c("min", "max", "N"), 
           title = "Descriptive Statistics",
-          covariate.labels = c("No Depression", "Little Depression", "Lot of Depression", "Medium Depression", "Northeast", "Midwest", "South", "West", "Male", "Female", "Less than HS", "HS Graduate", "Some College", "Bachelors", "Grad School", "White", "Black", "Native American", "Multiple Races", "Unknown", "Married", "Separated", "Divorced", "Widowed", "Living with Partner", "Never Married", "Unemployed", "Age"),
+          covariate.labels = c("% above Poverty Level", "No Depression", "Little Depression", "Medium Depression", "Lot of Depression", "Delayed Treatment", "Violence", "Lived with Ment. Ill.", "Northeast", "Midwest", "South", "West", "Male", "Female", "Less than HS", "HS Graduate", "Some College", "Bachelors", "Grad School", "White", "Black", "Native American", "Multiple Races", "Unknown", "Married", "Separated", "Divorced", "Widowed", "Living with Partner", "Never Married", "Unemployed", "Age"),
           out = "descriptive_stats.txt"
           )
+
+
 
 # Demographics
 desc_dem <- dem_nhis %>%
@@ -133,6 +226,7 @@ desc_dem <- dem_nhis %>%
     income = mean(POVLEV),
     sd_income = sd(POVLEV)
   )
+
 
 desc_sex <- dem_nhis %>%
   group_by(SEX) %>%
@@ -181,6 +275,7 @@ desc_age <- dem_nhis %>%
   )
 
 
+
 # Depression on Poverty Level Box Plot
 visdep_nhis <- new_nhis %>%
   select(YEAR, DEPFEELEVL, POVLEV, AGE, REGION, SEX)
@@ -223,29 +318,13 @@ desc_dep <- visdep_nhis %>%
 ggplot(visdep_nhis, mapping = aes(x = DEPFEELEVL, y = POVLEV)) +
   geom_boxplot() + 
   labs(
-    title = "Depression's Effect on Family Income as a % of Poverty Line",
+    title = "Depression's Effect on Family Income as a Multiple of Poverty Line",
     x = "Level of Depression",
-    y = "Family Income as % of Poverty Level"
+    y = "Family Income as Multiple of Poverty Level"
   ) 
 
 # Descriptive Statistics for Instruments
 #Adltputdown only available from '21 - '23
-
-desc_inst <- new_nhis %>%
-  filter(YEAR >= 2021 & YEAR <= 2023) %>%
-  select(YDELAYMENTAL, VIOLENEV, MENTDEPEV, ADLTPUTDOWN, POVLEV, DEPFEELEVL) %>%
-  pivot_longer(
-    cols = c("YDELAYMENTAL", "VIOLENEV", "MENTDEPEV", "ADLTPUTDOWN"),
-    names_to = "instrument",
-    values_to = "response"
-  ) %>%
-  filter(
-    response <3 & response > 0
-  ) %>%
-  group_by(instrument, response) %>%
-  summarise(
-    count = n()
-  )
 
 
 
